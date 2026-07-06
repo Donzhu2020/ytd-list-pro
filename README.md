@@ -13,6 +13,10 @@
   <a href="README.en.md">English</a>
 </p>
 
+<p align="center">
+  <a href="https://github.com/lxfater/ytd-list-pro/releases/latest"><b>⬇️ 下载安装包</b></a>（无需构建，解压即用，见<a href="#安装">安装说明</a>）
+</p>
+
 ---
 
 ## 功能特性
@@ -41,15 +45,23 @@
 
 ## 安装
 
+### 方式一：下载 Release 安装包（推荐，无需构建）
+
+不用装 Node、不用跑命令，直接用打包好的版本：
+
+1. 前往 [Releases 页面](https://github.com/lxfater/ytd-list-pro/releases/latest)，下载最新的 `ytd-list-pro-vX.Y.Z.zip` 并解压。
+2. 打开 `chrome://extensions/`（Edge 为 `edge://extensions/`），开启右上角「开发者模式」。
+3. 点击「加载已解压的扩展程序」，选择解压后的文件夹。
+4. 打开 [youtube.com](https://www.youtube.com)，按上面的使用教程同步订阅。
+
+### 方式二：从源码构建
+
 ```bash
 npm install
 npm run build
 ```
 
-1. 打开 `chrome://extensions/`（Edge 为 `edge://extensions/`）。
-2. 开启右上角「开发者模式」。
-3. 点击「加载已解压的扩展程序」，选择本项目的 `dist` 目录。
-4. 打开 [youtube.com](https://www.youtube.com)，按上面的使用教程同步订阅。
+构建完成后，同样按上面第 2-4 步操作，「加载已解压的扩展程序」时选择本项目的 `dist` 目录。
 
 ## 开发
 

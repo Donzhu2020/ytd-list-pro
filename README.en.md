@@ -13,6 +13,10 @@
   English
 </p>
 
+<p align="center">
+  <a href="https://github.com/lxfater/ytd-list-pro/releases/latest"><b>⬇️ Download the prebuilt package</b></a> (no build needed — see <a href="#install">Install</a>)
+</p>
+
 ---
 
 ## Features
@@ -41,15 +45,23 @@ There is an even faster way in daily use: on any watch page or channel page, an 
 
 ## Install
 
+### Option 1: Download from Releases (recommended, no build needed)
+
+No Node.js, no commands — just grab the prebuilt package:
+
+1. Go to the [Releases page](https://github.com/lxfater/ytd-list-pro/releases/latest) and download the latest `ytd-list-pro-vX.Y.Z.zip`, then unzip it.
+2. Open `chrome://extensions/` (`edge://extensions/` on Edge) and enable Developer mode in the top-right corner.
+3. Click "Load unpacked" and select the unzipped folder.
+4. Open [youtube.com](https://www.youtube.com) and sync your subscriptions following the guide above.
+
+### Option 2: Build from source
+
 ```bash
 npm install
 npm run build
 ```
 
-1. Open `chrome://extensions/` (`edge://extensions/` on Edge).
-2. Enable Developer mode in the top-right corner.
-3. Click "Load unpacked" and select this project's `dist` directory.
-4. Open [youtube.com](https://www.youtube.com) and sync your subscriptions following the guide above.
+Then follow steps 2-4 above, selecting this project's `dist` directory when loading the unpacked extension.
 
 ## Development
 
