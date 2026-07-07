@@ -3,6 +3,7 @@ import {
   addCategory,
   deleteCategory,
   getChannelsForCategory,
+  importChannelsToCategories,
   mergeSubscriptions,
   moveChannels,
   renameCategory,
@@ -13,9 +14,17 @@ import {
   toggleCategoryExpanded,
   upsertChannelToCategory
 } from "../shared/state";
-import { isExtensionContextInvalidated, loadOrImportInitialState, STORAGE_STATE_KEY, updateState } from "../shared/storage";
+import {
+  activateAccount,
+  activeStateStorageKey,
+  DEFAULT_ACCOUNT_ID,
+  isExtensionContextInvalidated,
+  loadOrImportInitialState,
+  updateState
+} from "../shared/storage";
 import type { Channel, ChannelSortMode, ExtensionState, SidebarMode } from "../shared/types";
 import { PRESET_COLORS, UNCATEGORIZED_ID } from "../shared/constants";
+import { buildCategoriesCsv, parseCategoriesCsv } from "../shared/transfer";
 import { parseSubscriptionsFromDocument } from "../shared/youtube-parser";
 import { type CategoryDraft, MANAGER_STYLES, type ManagerUiState, renderManager } from "./manager";
 import {
@@ -45,6 +54,37 @@ let guideObserver: MutationObserver | undefined;
 let managerOpen = false;
 let draggedCategoryId: string | undefined;
 let quickAddTimer: number | undefined;
+let activatedAccountId: string | undefined;
+
+// YouTube exposes a per-account DATASYNC_ID in inline page config; switching
+// accounts always reloads the page, so one successful detection is stable for
+// the lifetime of this content script.
+const detectYouTubeAccountId = (): string | undefined => {
+  for (const script of Array.from(document.scripts)) {
+    const text = script.textContent;
+    if (!text || !text.includes("DATASYNC_ID")) {
+      continue;
+    }
+    const match = text.match(/"DATASYNC_ID"\s*:\s*"([^"|]+)/);
+    if (match?.[1]) {
+      return match[1];
+    }
+  }
+  return undefined;
+};
+
+const ensureAccountActive = async () => {
+  const found = detectYouTubeAccountId();
+  if (found === undefined && activatedAccountId !== undefined) {
+    return;
+  }
+  const target = found ?? DEFAULT_ACCOUNT_ID;
+  if (activatedAccountId === target) {
+    return;
+  }
+  activatedAccountId = target;
+  await activateAccount(target);
+};
 let managerUi: ManagerUiState = {
   selectedCategoryId: UNCATEGORIZED_ID,
   selectedChannelIds: [],
@@ -256,6 +296,7 @@ const scheduleMount = () => {
   }
   mountTimer = window.setTimeout(() => {
     void safeAsync(async () => {
+      await ensureAccountActive();
       currentState = await loadOrImportInitialState();
       refreshViews(currentState);
     });
@@ -284,6 +325,7 @@ const addGuideObserver = () => {
 };
 
 const collectAndSaveSubscriptions = async (): Promise<CollectSubscriptionsResponse> => {
+  await ensureAccountActive();
   const sessionResult = await readSubscriptionsFromPageSession();
   if (!sessionResult.ok) {
     const visibleCount = parseSubscriptionsFromDocument(document).length;
@@ -304,6 +346,7 @@ const collectAndSaveSubscriptions = async (): Promise<CollectSubscriptionsRespon
 
 function openManager() {
   void safeAsync(async () => {
+    await ensureAccountActive();
     currentState = currentState ?? (await loadOrImportInitialState());
     managerOpen = true;
     managerUi.status = "准备就绪";
@@ -510,6 +553,62 @@ const managerHandlers = {
     }
   },
   onMoveSelected: moveSelectedFromManager,
+  onExport() {
+    if (!currentState) {
+      return;
+    }
+    const csv = buildCategoriesCsv(currentState);
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `ytd-list-pro-categories-${new Date().toISOString().slice(0, 10)}.csv`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+    managerUi.status = "已导出 CSV 文件（可用 Excel 打开）";
+    mountManager(currentState);
+  },
+  onImport() {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".csv,text/csv";
+    input.addEventListener("change", () => {
+      const file = input.files?.[0];
+      if (!file) {
+        return;
+      }
+      void safeAsync(async () => {
+        const text = await file.text();
+        const { items, errors } = parseCategoriesCsv(text);
+        if (items.length === 0) {
+          managerUi.status =
+            errors[0] ?? "没有可导入的数据。CSV 需要三列：分类,频道名称,频道链接（频道名称可留空）";
+          if (currentState) {
+            mountManager(currentState);
+          }
+          return;
+        }
+        let importedCount = 0;
+        let createdCount = 0;
+        currentState = await updateState((state) => {
+          const outcome = importChannelsToCategories(state, items, makeCategoryId);
+          importedCount = outcome.importedCount;
+          createdCount = outcome.createdCategories.length;
+          return outcome.state;
+        });
+        const parts = [`已导入 ${importedCount} 个频道`];
+        if (createdCount > 0) {
+          parts.push(`新建 ${createdCount} 个分类`);
+        }
+        if (errors.length > 0) {
+          parts.push(`跳过 ${errors.length} 行（${errors[0]}）`);
+        }
+        managerUi.status = parts.join("，");
+        refreshViews(currentState);
+      });
+    });
+    input.click();
+  },
   onOpenChannel: openChannel,
   onSortChange(sortMode: ChannelSortMode) {
     managerUi.sortMode = sortMode;
@@ -566,10 +665,11 @@ const addMessageListener = () => {
 
 const addStorageListener = () => {
   const listener = (changes: Record<string, chrome.storage.StorageChange>, areaName: string) => {
-    if (areaName !== "local" || !changes[STORAGE_STATE_KEY]?.newValue) {
+    const stateKey = activeStateStorageKey();
+    if (areaName !== "local" || !changes[stateKey]?.newValue) {
       return;
     }
-    currentState = changes[STORAGE_STATE_KEY].newValue as ExtensionState;
+    currentState = changes[stateKey].newValue as ExtensionState;
     refreshViews(currentState);
   };
   chrome.storage.onChanged.addListener(listener);

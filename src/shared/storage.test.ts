@@ -1,12 +1,17 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { addCategory, createEmptyState } from "./state";
 import type { LegacyImportData } from "./types";
 import {
+  activateAccount,
+  configureStorageAccount,
   createMemoryStorageArea,
+  DEFAULT_ACCOUNT_ID,
   isExtensionContextInvalidated,
+  loadActiveAccountId,
   loadOrImportInitialState,
   loadState,
   saveState,
+  STORAGE_STATE_KEY,
   updateState
 } from "./storage";
 
@@ -73,5 +78,58 @@ describe("storage helpers", () => {
     };
 
     await expect(loadState(storage)).resolves.toEqual(createEmptyState());
+  });
+});
+
+describe("per-account storage", () => {
+  afterEach(() => {
+    configureStorageAccount(DEFAULT_ACCOUNT_ID);
+  });
+
+  const legacyState = () =>
+    addCategory(createEmptyState(), { id: "cat-old", name: "Old", color: "#0ea5e9", icon: "channel" });
+
+  it("keeps the legacy key when no account is detected", async () => {
+    const storage = createMemoryStorageArea();
+    await activateAccount(undefined, storage);
+    await saveState(legacyState(), storage);
+    const raw = await storage.get(STORAGE_STATE_KEY);
+    expect(raw[STORAGE_STATE_KEY]).toBeDefined();
+  });
+
+  it("lets the first detected account adopt legacy data and keeps a backup", async () => {
+    const storage = createMemoryStorageArea({ [STORAGE_STATE_KEY]: legacyState() });
+    await activateAccount("acc-1", storage);
+    const state = await loadState(storage);
+    expect(state.categoryOrder).toEqual(["cat-old"]);
+    const raw = await storage.get(STORAGE_STATE_KEY);
+    expect(raw[STORAGE_STATE_KEY]).toBeDefined();
+  });
+
+  it("isolates accounts: a second account starts empty and writes do not leak", async () => {
+    const storage = createMemoryStorageArea({ [STORAGE_STATE_KEY]: legacyState() });
+    await activateAccount("acc-1", storage);
+    await updateState(
+      (state) => addCategory(state, { id: "cat-a1", name: "A1", color: "#111", icon: "default" }),
+      storage
+    );
+
+    await activateAccount("acc-2", storage);
+    const second = await loadState(storage);
+    expect(second.categoryOrder).toEqual([]);
+    await updateState(
+      (state) => addCategory(state, { id: "cat-b1", name: "B1", color: "#222", icon: "default" }),
+      storage
+    );
+
+    await activateAccount("acc-1", storage);
+    const first = await loadState(storage);
+    expect(first.categoryOrder).toEqual(["cat-old", "cat-a1"]);
+  });
+
+  it("remembers the most recently active account for the popup", async () => {
+    const storage = createMemoryStorageArea();
+    await activateAccount("acc-9", storage);
+    expect(await loadActiveAccountId(storage)).toBe("acc-9");
   });
 });

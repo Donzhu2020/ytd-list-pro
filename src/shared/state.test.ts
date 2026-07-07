@@ -10,6 +10,7 @@ import {
   renameCategory,
   reorderCategories,
   getChannelCategoryId,
+  importChannelsToCategories,
   searchAllChannels,
   searchChannels,
   upsertChannelToCategory
@@ -357,5 +358,59 @@ describe("upsertChannelToCategory", () => {
     const state = upsertChannelToCategory(buildState(), pageChannel, "cat-dev", 99);
     expect(state.channels["UC-a"]?.name).toBe("Alpha");
     expect(state.channels["UC-a"]?.handle).toBe("@UC-a");
+  });
+});
+
+describe("importChannelsToCategories", () => {
+  const makeId = (() => {
+    let counter = 0;
+    return () => {
+      counter += 1;
+      return `cat-import-${counter}`;
+    };
+  })();
+
+  const item = (categoryName: string, handle: string, name = handle) => ({
+    categoryName,
+    channel: {
+      id: `handle:${handle.toLocaleLowerCase()}`,
+      name,
+      handle: `@${handle}`,
+      url: `https://www.youtube.com/@${handle}`
+    }
+  });
+
+  it("creates missing categories and files channels into them", () => {
+    const outcome = importChannelsToCategories(createEmptyState(), [item("编程", "tim"), item("编程", "fireship")], makeId, 5);
+    expect(outcome.importedCount).toBe(2);
+    expect(outcome.createdCategories).toEqual(["编程"]);
+    const categoryId = outcome.state.categoryOrder[0];
+    expect(outcome.state.categories[categoryId]?.channelIds).toHaveLength(2);
+  });
+
+  it("reuses an existing category by name instead of duplicating it", () => {
+    const withCategory = addCategory(createEmptyState(), { id: "cat-dev", name: "编程", color: "#111", icon: "code" });
+    const outcome = importChannelsToCategories(withCategory, [item("编程", "tim")], makeId, 5);
+    expect(outcome.createdCategories).toEqual([]);
+    expect(outcome.state.categories["cat-dev"]?.channelIds).toEqual(["handle:tim"]);
+  });
+
+  it("routes 未分类 rows into the uncategorized bucket", () => {
+    const outcome = importChannelsToCategories(createEmptyState(), [item("未分类", "solo")], makeId, 5);
+    expect(outcome.createdCategories).toEqual([]);
+    expect(outcome.state.uncategorizedChannelIds).toEqual(["handle:solo"]);
+  });
+
+  it("moves an already known channel instead of creating a duplicate", () => {
+    const base = mergeSubscriptions(createEmptyState(), [channel("UC-x", "Existing")], 10);
+    const outcome = importChannelsToCategories(
+      base,
+      [{ categoryName: "新分类", channel: { id: "handle:uc-x", name: "Existing", handle: "@UC-x", url: "https://www.youtube.com/@UC-x" } }],
+      makeId,
+      5
+    );
+    expect(Object.keys(outcome.state.channels)).toEqual(["UC-x"]);
+    const categoryId = outcome.state.categoryOrder[0];
+    expect(outcome.state.categories[categoryId]?.channelIds).toEqual(["UC-x"]);
   });
 });

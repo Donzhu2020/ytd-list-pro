@@ -27,6 +27,8 @@
 - **Quick add** — an "add to category" button appears next to the subscribe button on watch and channel pages; it also shows which category the channel currently belongs to.
 - **Global search** — search across all categories with multiple keywords in any order; results are tagged with their category.
 - **Bulk management** — multi-select, bulk move, drag-and-drop, and flexible sorting in the manager panel.
+- **Multi-account isolation** — each YouTube account keeps its own categories; switching accounts never mixes data. Data from older versions is migrated automatically to the first account used after upgrading.
+- **Import / Export** — export all categories to a CSV file (opens directly in Excel) and bulk-import from CSV.
 - **Local-first** — all state lives in `chrome.storage.local`; there is no backend.
 
 ## How to Use
@@ -62,6 +64,29 @@ npm run build
 ```
 
 Then follow steps 2-4 above, selecting this project's `dist` directory when loading the unpacked extension.
+
+## Export / Import
+
+The manager panel toolbar has 导出 (Export) and 导入 (Import) buttons.
+
+**Export** downloads all categories and channels as a CSV file (UTF-8 with BOM, so Excel opens it correctly, including CJK text).
+
+**Import** accepts a CSV with the same structure. The first row is an optional header; every following row is one channel with three columns:
+
+| 分类 (Category) | 频道名称 (Channel Name) | 频道链接 (Channel URL) |
+| --- | --- | --- |
+| AI Masters | Matt Wolfe | https://www.youtube.com/@mreflow |
+| Coding | Tech With Tim | https://www.youtube.com/@TechWithTim |
+| 未分类 | | https://www.youtube.com/channel/UCxxxxxxxx |
+
+Column rules:
+
+- **Category** (required) — the category name. Missing categories are created automatically; the name 未分类 (Uncategorized) routes the channel to the uncategorized list.
+- **Channel Name** (optional) — inferred from the URL when empty, and replaced with the real name on the next subscription refresh.
+- **Channel URL** (required) — both `https://www.youtube.com/@handle` and `https://www.youtube.com/channel/UC...` forms are supported.
+- Channels that already exist (matched by channel ID or handle) are **moved** to the target category rather than duplicated; unrecognized rows are skipped and reported with their line numbers in the status bar.
+
+Tip: the safest way to build an import file is to export first and edit that CSV as a template.
 
 ## Development
 

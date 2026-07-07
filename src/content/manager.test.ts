@@ -90,6 +90,8 @@ const handlers = () => ({
   onClearSelected: vi.fn(),
   onMoveTargetChange: vi.fn(),
   onMoveSelected: vi.fn(),
+  onExport: vi.fn(),
+  onImport: vi.fn(),
   onOpenChannel: vi.fn(),
   onSortChange: vi.fn(),
   onDragCategoryStart: vi.fn(),

@@ -37,7 +37,14 @@ import {
   searchAllChannels,
   setCategoryAppearance
 } from "../shared/state";
-import { isExtensionContextInvalidated, loadOrImportInitialState, saveState, STORAGE_STATE_KEY } from "../shared/storage";
+import {
+  activeStateStorageKey,
+  configureStorageAccount,
+  isExtensionContextInvalidated,
+  loadActiveAccountId,
+  loadOrImportInitialState,
+  saveState
+} from "../shared/storage";
 import type { Category, CategoryIconId, Channel, ExtensionState } from "../shared/types";
 import { injectSubscriptionScripts, isMissingContentScript } from "./tab-refresh";
 
@@ -184,7 +191,11 @@ export function App() {
 
   useEffect(() => {
     let mounted = true;
-    void loadOrImportInitialState()
+    void loadActiveAccountId()
+      .then((accountId) => {
+        configureStorageAccount(accountId);
+        return loadOrImportInitialState();
+      })
       .then((loaded) => {
         if (mounted) {
           setState(loaded);
@@ -197,8 +208,9 @@ export function App() {
       });
 
     const listener = (changes: Record<string, chrome.storage.StorageChange>, areaName: string) => {
-      if (areaName === "local" && changes[STORAGE_STATE_KEY]?.newValue && mounted) {
-        setState(changes[STORAGE_STATE_KEY].newValue as ExtensionState);
+      const stateKey = activeStateStorageKey();
+      if (areaName === "local" && changes[stateKey]?.newValue && mounted) {
+        setState(changes[stateKey].newValue as ExtensionState);
       }
     };
     chrome.storage.onChanged.addListener(listener);

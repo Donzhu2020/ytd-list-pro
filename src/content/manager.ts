@@ -34,6 +34,8 @@ export type ManagerHandlers = {
   onClearSelected(): void;
   onMoveTargetChange(categoryId: string): void;
   onMoveSelected(): void;
+  onExport(): void;
+  onImport(): void;
   onOpenChannel(channel: Channel): void;
   onSortChange(sortMode: ChannelSortMode): void;
   onDragCategoryStart(categoryId: string): void;
@@ -448,7 +450,15 @@ export function renderManager(
   const clear = createElement("button", "ytdlp-manager-secondary", "取消");
   clear.type = "button";
   clear.addEventListener("click", handlers.onClearSelected);
-  toolbar.append(refresh, search, sort, selectAll, clear);
+  const exportButton = createElement("button", "ytdlp-manager-secondary ytdlp-manager-export", "导出");
+  exportButton.type = "button";
+  exportButton.title = "导出全部分类为 CSV（可用 Excel 打开）";
+  exportButton.addEventListener("click", handlers.onExport);
+  const importButton = createElement("button", "ytdlp-manager-secondary ytdlp-manager-import", "导入");
+  importButton.type = "button";
+  importButton.title = "从 CSV 导入分类（三列：分类,频道名称,频道链接）";
+  importButton.addEventListener("click", handlers.onImport);
+  toolbar.append(refresh, search, sort, selectAll, clear, exportButton, importButton);
 
   const summary = createElement("div", "ytdlp-manager-summary");
   const summaryText = createElement("div");

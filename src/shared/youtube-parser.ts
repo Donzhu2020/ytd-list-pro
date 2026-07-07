@@ -31,6 +31,30 @@ export const getHandleFromPath = (pathname: string): string | undefined => {
 
 const cleanText = (value: string | null | undefined): string => value?.replace(/\s+/g, " ").trim() ?? "";
 
+export function channelFromUrl(href: string, name: string, avatarUrl?: string): Channel | undefined {
+  let pathname: string;
+  let url: string;
+  try {
+    const parsed = new URL(href, YOUTUBE_ORIGIN);
+    pathname = parsed.pathname;
+    url = `${parsed.origin}${parsed.pathname}`;
+  } catch {
+    return undefined;
+  }
+  const handle = getHandleFromPath(pathname);
+  const id = getChannelIdFromPath(pathname) ?? (handle ? `handle:${handle.slice(1).toLocaleLowerCase()}` : undefined);
+  if (!id) {
+    return undefined;
+  }
+  return {
+    id,
+    name: cleanText(name) || "未命名频道",
+    handle,
+    avatarUrl: normalizeAvatarUrl(avatarUrl),
+    url
+  };
+}
+
 const getClosestChannelId = (anchor: HTMLAnchorElement): string | undefined => {
   const container = anchor.closest("[data-channel-external-id], [data-channel-id]");
   return (

@@ -3,6 +3,23 @@ import { applyLegacyImportIfNeeded, createEmptyState } from "./state";
 import type { ExtensionState, LegacyImportData } from "./types";
 
 export const STORAGE_STATE_KEY = "ytdListProState";
+export const STORAGE_ACTIVE_ACCOUNT_KEY = "ytdListProActiveAccount";
+export const STORAGE_LEGACY_OWNER_KEY = "ytdListProLegacyOwner";
+export const DEFAULT_ACCOUNT_ID = "default";
+
+let activeAccountId = DEFAULT_ACCOUNT_ID;
+
+export const storageKeyForAccount = (accountId: string): string =>
+  accountId === DEFAULT_ACCOUNT_ID ? STORAGE_STATE_KEY : `${STORAGE_STATE_KEY}:${accountId}`;
+
+export function configureStorageAccount(accountId: string | undefined): string {
+  activeAccountId = accountId?.trim() || DEFAULT_ACCOUNT_ID;
+  return activeAccountId;
+}
+
+export const getActiveStorageAccount = (): string => activeAccountId;
+
+export const activeStateStorageKey = (): string => storageKeyForAccount(activeAccountId);
 
 export interface ExtensionStorageArea {
   get(keys?: string | string[] | Record<string, unknown> | null): Promise<Record<string, unknown>>;
@@ -66,8 +83,9 @@ export async function loadState(storageArea = getChromeStorageArea()): Promise<E
     return createEmptyState();
   }
   try {
-    const result = await storageArea.get(STORAGE_STATE_KEY);
-    const state = result[STORAGE_STATE_KEY];
+    const key = activeStateStorageKey();
+    const result = await storageArea.get(key);
+    const state = result[key];
     return isExtensionState(state) ? state : createEmptyState();
   } catch (error) {
     if (isExtensionContextInvalidated(error)) {
@@ -85,11 +103,65 @@ export async function saveState(
     return state;
   }
   try {
-    await storageArea.set({ [STORAGE_STATE_KEY]: state });
+    await storageArea.set({ [activeStateStorageKey()]: state });
     return state;
   } catch (error) {
     if (isExtensionContextInvalidated(error)) {
       return state;
+    }
+    throw error;
+  }
+}
+
+/**
+ * Point storage at the given account and, the first time a real account is
+ * seen, let it adopt the pre-account (legacy) data so an existing user keeps
+ * everything after upgrading. The legacy key is left in place as a backup;
+ * other accounts start from an empty state.
+ */
+export async function activateAccount(
+  accountId: string | undefined,
+  storageArea = getChromeStorageArea()
+): Promise<string> {
+  const resolved = configureStorageAccount(accountId);
+  if (!storageArea) {
+    return resolved;
+  }
+  try {
+    await storageArea.set({ [STORAGE_ACTIVE_ACCOUNT_KEY]: resolved });
+    if (resolved === DEFAULT_ACCOUNT_ID) {
+      return resolved;
+    }
+    const accountKey = storageKeyForAccount(resolved);
+    const result = await storageArea.get([accountKey, STORAGE_STATE_KEY, STORAGE_LEGACY_OWNER_KEY]);
+    const legacyOwner = result[STORAGE_LEGACY_OWNER_KEY];
+    if (!isExtensionState(result[accountKey]) && isExtensionState(result[STORAGE_STATE_KEY])) {
+      if (legacyOwner === undefined || legacyOwner === resolved) {
+        await storageArea.set({
+          [accountKey]: result[STORAGE_STATE_KEY],
+          [STORAGE_LEGACY_OWNER_KEY]: resolved
+        });
+      }
+    }
+  } catch (error) {
+    if (!isExtensionContextInvalidated(error)) {
+      throw error;
+    }
+  }
+  return resolved;
+}
+
+export async function loadActiveAccountId(storageArea = getChromeStorageArea()): Promise<string> {
+  if (!storageArea) {
+    return DEFAULT_ACCOUNT_ID;
+  }
+  try {
+    const result = await storageArea.get(STORAGE_ACTIVE_ACCOUNT_KEY);
+    const value = result[STORAGE_ACTIVE_ACCOUNT_KEY];
+    return typeof value === "string" && value.trim() ? value : DEFAULT_ACCOUNT_ID;
+  } catch (error) {
+    if (isExtensionContextInvalidated(error)) {
+      return DEFAULT_ACCOUNT_ID;
     }
     throw error;
   }

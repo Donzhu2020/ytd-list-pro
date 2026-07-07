@@ -1,4 +1,10 @@
-import { RECOVERED_CATEGORY_APPEARANCE, STATE_SCHEMA_VERSION, UNCATEGORIZED_CATEGORY, UNCATEGORIZED_ID } from "./constants";
+import {
+  PRESET_COLORS,
+  RECOVERED_CATEGORY_APPEARANCE,
+  STATE_SCHEMA_VERSION,
+  UNCATEGORIZED_CATEGORY,
+  UNCATEGORIZED_ID
+} from "./constants";
 import { normalizeAvatarUrl } from "./avatar";
 import type { Category, CategoryInput, Channel, ExtensionState, LegacyImportData } from "./types";
 
@@ -307,6 +313,59 @@ export function upsertChannelToCategory(
     };
   }
   return moveChannels(state, [channelId], categoryId);
+}
+
+export interface CategorizedChannelImport {
+  channel: Channel;
+  categoryName: string;
+}
+
+export interface ImportOutcome {
+  state: ExtensionState;
+  importedCount: number;
+  createdCategories: string[];
+}
+
+export function importChannelsToCategories(
+  currentState: ExtensionState,
+  items: CategorizedChannelImport[],
+  makeCategoryId: () => string,
+  now = Date.now()
+): ImportOutcome {
+  let state = cloneState(currentState);
+  const createdCategories: string[] = [];
+  let importedCount = 0;
+
+  const findCategoryIdByName = (name: string): string | undefined => {
+    const key = name.trim().toLocaleLowerCase();
+    if (!key || key === UNCATEGORIZED_CATEGORY.name || key === "uncategorized") {
+      return UNCATEGORIZED_ID;
+    }
+    for (const category of Object.values(state.categories)) {
+      if (category.name.trim().toLocaleLowerCase() === key) {
+        return category.id;
+      }
+    }
+    return undefined;
+  };
+
+  for (const item of items) {
+    let categoryId = findCategoryIdByName(item.categoryName);
+    if (!categoryId) {
+      categoryId = makeCategoryId();
+      state = addCategory(state, {
+        id: categoryId,
+        name: item.categoryName.trim(),
+        color: PRESET_COLORS[state.categoryOrder.length % PRESET_COLORS.length],
+        icon: "default"
+      });
+      createdCategories.push(item.categoryName.trim());
+    }
+    state = upsertChannelToCategory(state, item.channel, categoryId, now);
+    importedCount += 1;
+  }
+
+  return { state, importedCount, createdCategories };
 }
 
 export function getChannelsForCategory(state: ExtensionState, categoryId: string): Channel[] {

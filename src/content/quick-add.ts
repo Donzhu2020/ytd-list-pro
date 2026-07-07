@@ -1,8 +1,7 @@
 import { UNCATEGORIZED_ID } from "../shared/constants";
-import { normalizeAvatarUrl } from "../shared/avatar";
 import { findChannelByIdOrHandle, getChannelCategoryId } from "../shared/state";
 import type { Channel, ExtensionState } from "../shared/types";
-import { getChannelIdFromPath, getHandleFromPath } from "../shared/youtube-parser";
+import { channelFromUrl } from "../shared/youtube-parser";
 import { createSvgIcon } from "./sidebar";
 
 export const QUICK_ADD_ROOT_ID = "ytdlp-quick-add";
@@ -13,30 +12,6 @@ export type QuickAddHandlers = {
 };
 
 const cleanText = (value: string | null | undefined): string => value?.replace(/\s+/g, " ").trim() ?? "";
-
-const channelFromPath = (href: string, name: string, avatarUrl?: string): Channel | undefined => {
-  let pathname: string;
-  let url: string;
-  try {
-    const parsed = new URL(href, "https://www.youtube.com");
-    pathname = parsed.pathname;
-    url = `${parsed.origin}${parsed.pathname}`;
-  } catch {
-    return undefined;
-  }
-  const handle = getHandleFromPath(pathname);
-  const id = getChannelIdFromPath(pathname) ?? (handle ? `handle:${handle.slice(1).toLocaleLowerCase()}` : undefined);
-  if (!id) {
-    return undefined;
-  }
-  return {
-    id,
-    name: cleanText(name) || "未命名频道",
-    handle,
-    avatarUrl: normalizeAvatarUrl(avatarUrl),
-    url
-  };
-};
 
 const readWatchPageChannel = (root: ParentNode): Channel | undefined => {
   const owner = root.querySelector("ytd-watch-metadata #owner");
@@ -50,7 +25,7 @@ const readWatchPageChannel = (root: ParentNode): Channel | undefined => {
   }
   const name = cleanText(owner.querySelector("#channel-name")?.textContent);
   const avatar = owner.querySelector<HTMLImageElement>("img")?.src;
-  return channelFromPath(href, name, avatar);
+  return channelFromUrl(href, name, avatar);
 };
 
 const readChannelPageChannel = (root: ParentNode, pathname: string): Channel | undefined => {
@@ -60,7 +35,7 @@ const readChannelPageChannel = (root: ParentNode, pathname: string): Channel | u
   }
   const name = cleanText(header.querySelector("h1")?.textContent);
   const avatar = header.querySelector<HTMLImageElement>("yt-avatar-shape img, #avatar img, img")?.src;
-  return channelFromPath(pathname, name, avatar);
+  return channelFromUrl(pathname, name, avatar);
 };
 
 export const readPageChannel = (root: ParentNode = document, pathname = location.pathname): Channel | undefined =>
